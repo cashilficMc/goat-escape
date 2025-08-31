@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Run From the Goats - Low Poly</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #88ccff; }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-family: Arial, sans-serif;
+      text-shadow: 1px 1px 3px black;
+      user-select: none;
+    }
+    #info .hint { font-size: 13px; opacity: 0.9; }
+  </style>
+</head>
+<body>
+  <div id="info">
+    <div id="status">Survive 20 seconds!</div>
+    <div class="hint">Click the game area, then use Arrow keys or WASD to move. Press R to restart.</div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+  <script>
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x88ccff);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({antialias: true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    renderer.domElement.tabIndex = 0;
+    renderer.domElement.style.outline = 'none';
+    renderer.domElement.addEventListener('click', () => renderer.domElement.focus());
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Lights
+    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambient);
+    const sun = new THREE.DirectionalLight(0xffffff, 1);
+    sun.position.set(20, 30, 10);
+    sun.castShadow = true;
+    scene.add(sun);
+
+    // Ground (green grass)
+    const groundGeo = new THREE.PlaneGeometry(80, 80);
+    const groundMat = new THREE.MeshLambertMaterial({color: 0x55aa55});
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI/2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Player (rounded glowing)
+    const playerGeo = new THREE.SphereGeometry(0.6, 16, 16);
+    const playerMat = new THREE.MeshPhongMaterial({color: 0x00ffe0, shininess: 100});
+    const player = new THREE.Mesh(playerGeo, playerMat);
+    player.position.y = 0.6;
+    player.castShadow = true;
+    scene.add(player);
+
+    // Goat builder (low-poly cartoon goat)
+    function makeGoat() {
+      const goat = new THREE.Group();
+
+      // body
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(1.2, 0.8, 2),
+        new THREE.MeshLambertMaterial({color: 0xffffff})
+      );
+      body.castShadow = true;
+      body.position.y = 0.8;
+      goat.add(body);
+
+      // head
+      const head = new THREE.Mesh(
+        new THREE.BoxGeometry(0.8, 0.8, 0.8),
+        new THREE.MeshLambertMaterial({color: 0xffffff})
+      );
+      head.position.set(0, 1.2, 1.4);
+      head.castShadow = true;
+      goat.add(head);
+
+      // horns
+      const hornGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.5, 6);
+      const hornMat = new THREE.MeshLambertMaterial({color: 0xaaaaaa});
+      const horn1 = new THREE.Mesh(hornGeo, hornMat);
+      horn1.position.set(-0.2, 1.6, 1.6);
+      horn1.rotation.x = Math.PI/2;
+      horn1.castShadow = true;
+      goat.add(horn1);
+      const horn2 = horn1.clone();
+      horn2.position.x = 0.2;
+      goat.add(horn2);
+
+      // legs
+      function leg(x, z) {
+        const l = new THREE.Mesh(
+          new THREE.BoxGeometry(0.2, 0.8, 0.2),
+          new THREE.MeshLambertMaterial({color: 0x884422})
+        );
+        l.position.set(x, 0.4, z);
+        l.castShadow = true;
+        goat.add(l);
+      }
+      leg(-0.4, 0.8);
+      leg(0.4, 0.8);
+      leg(-0.4, -0.8);
+      leg(0.4, -0.8);
+
+      goat.position.set((Math.random()-0.5)*40, 0, (Math.random()-0.5)*40);
+      return goat;
+    }
+
+    const goats = [];
+    for (let i = 0; i < 6; i++) {
+      const g = makeGoat();
+      scene.add(g);
+      goats.push(g);
+    }
+
+    // Camera
+    camera.position.set(0, 12, 18);
+    camera.lookAt(0,0,0);
+
+    // Controls
+    const move = {forward: false, back: false, left: false, right: false};
+    const speed = 8;
+    const clock = new THREE.Clock();
+
+    function onKeyDown(e) {
+      const code = e.code;
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(code)) e.preventDefault();
+      if (code === 'ArrowUp' || code === 'KeyW') move.forward = true;
+      if (code === 'ArrowDown' || code === 'KeyS') move.back = true;
+      if (code === 'ArrowLeft' || code === 'KeyA') move.left = true;
+      if (code === 'ArrowRight' || code === 'KeyD') move.right = true;
+      if (code === 'KeyR') resetGame();
+    }
+    function onKeyUp(e) {
+      if (e.code === 'ArrowUp' || e.code === 'KeyW') move.forward = false;
+      if (e.code === 'ArrowDown' || e.code === 'KeyS') move.back = false;
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') move.left = false;
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') move.right = false;
+    }
+    renderer.domElement.addEventListener('keydown', onKeyDown);
+    renderer.domElement.addEventListener('keyup', onKeyUp);
+    window.addEventListener('keydown', e => { if (e.code === 'KeyR') resetGame(); });
+
+    let startTime = performance.now();
+    let gameOver = false;
+
+    function resetGame() {
+      player.position.set(0,0.6,0);
+      goats.forEach(g => g.position.set((Math.random()-0.5)*40, 0, (Math.random()-0.5)*40));
+      startTime = performance.now();
+      gameOver = false;
+      document.getElementById('status').innerText = 'Survive 20 seconds!';
+    }
+    resetGame();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = clock.getDelta();
+
+      if (!gameOver) {
+        let dx = 0, dz = 0;
+        if (move.forward) dz -= 1;
+        if (move.back) dz += 1;
+        if (move.left) dx -= 1;
+        if (move.right) dx += 1;
+        if (dx || dz) {
+          const len = Math.sqrt(dx*dx + dz*dz);
+          dx /= len; dz /= len;
+          player.position.x += dx * speed * dt;
+          player.position.z += dz * speed * dt;
+        }
+
+        const goatSpeed = 2.5;
+        goats.forEach(g => {
+          const vx = player.position.x - g.position.x;
+          const vz = player.position.z - g.position.z;
+          const dist = Math.sqrt(vx*vx + vz*vz);
+          if (dist > 0.001) {
+            g.position.x += (vx/dist) * goatSpeed * dt;
+            g.position.z += (vz/dist) * goatSpeed * dt;
+          }
+          if (dist < 1.2) {
+            gameOver = true;
+            document.getElementById('status').innerText = 'You got caught! Press R to restart';
+          }
+        });
+
+        if (performance.now() - startTime > 20000) {
+          gameOver = true;
+          document.getElementById('status').innerText = 'You escaped! 🎉 Press R to play again';
+        }
+      }
+
+      // Camera follow
+      const targetPos = new THREE.Vector3(player.position.x, player.position.y + 12, player.position.z + 18);
+      camera.position.lerp(targetPos, 0.1);
+      camera.lookAt(player.position);
+
+      renderer.render(scene, camera);
+    }
+    animate();
+  </script>
+</body>
+</html>
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Goat Escape Adventure</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #88ccff; }
+    #info { position: absolute; top: 10px; left: 10px; color: white; font-family: Arial, text-shadow: 1px 1px 3px black; }
+    #info .hint { font-size: 13px; opacity: 0.9; }
+  </style>
+</head>
+<body>
+<div id="info">
+  <div id="status">Survive 20 seconds!</div>
+  <div class="hint">Click game area → Arrow keys/WASD to move → R to restart</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script>
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x88ccff);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+// Focus canvas for keyboard
+renderer.domElement.tabIndex = 0;
+renderer.domElement.style.outline = 'none';
+renderer.domElement.addEventListener('click', () => renderer.domElement.focus());
+
+// Resize
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff,0.5));
+const sun = new THREE.DirectionalLight(0xffffff,1);
+sun.position.set(20,30,10);
+sun.castShadow = true;
+scene.add(sun);
+
+// Ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(80,80),
+  new THREE.MeshLambertMaterial({color:0x55aa55})
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Player
+const player = new THREE.Mesh(
+  new THREE.SphereGeometry(0.6,16,16),
+  new THREE.MeshPhongMaterial({color:0x00ffe0, shininess:100})
+);
+player.position.y = 0.6;
+player.castShadow = true;
+scene.add(player);
+
+// Low-poly goat generator
+function makeGoat() {
+  const goat = new THREE.Group();
+
+  const bodyHeight = 0.8 + Math.random()*0.2;
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(1.2, bodyHeight, 2),
+    new THREE.MeshLambertMaterial({color:0xffffff})
+  );
+  body.position.y = bodyHeight/2;
+  body.castShadow = true;
+  goat.add(body);
+
+  const head = new THREE.Mesh(
+    new THREE.BoxGeometry(0.8, 0.8, 0.8),
+    new THREE.MeshLambertMaterial({color:0xffffff})
+  );
+  head.position.set(0, bodyHeight + 0.4, 1.4);
+  head.castShadow = true;
+  goat.add(head);
+
+  // Ears
+  function ear(x) {
+    const e = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1,0.3,0.05),
+      new THREE.MeshLambertMaterial({color:0xffffff})
+    );
+    e.position.set(x, bodyHeight+0.5,1.5);
+    e.castShadow = true;
+    goat.add(e);
+  }
+  ear(-0.25); ear(0.25);
+
+  // Horns
+  function horn(x) {
+    const h = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05,0.05,0.5,6),
+      new THREE.MeshLambertMaterial({color:0xaaaaaa})
+    );
+    h.position.set(x, bodyHeight+1.1, 1.6);
+    h.rotation.x = Math.PI/2;
+    h.castShadow = true;
+    goat.add(h);
+  }
+  horn(-0.2); horn(0.2);
+
+  // Legs
+  function leg(x,z) {
+    const l = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, bodyHeight, 0.2),
+      new THREE.MeshLambertMaterial({color:0x884422})
+    );
+    l.position.set(x, bodyHeight/2, z);
+    l.castShadow = true;
+    goat.add(l);
+  }
+  leg(-0.4,0.8); leg(0.4,0.8); leg(-0.4,-0.8); leg(0.4,-0.8);
+
+  // Eyes
+  function eye(x) {
+    const e = new THREE.Mesh(
+      new THREE.SphereGeometry(0.07,8,8),
+      new THREE.MeshLambertMaterial({color:0x000000})
+    );
+    e.position.set(x, bodyHeight+0.5,1.75);
+    goat.add(e);
+  }
+  eye(-0.2); eye(0.2);
+
+  // Random start position
+  goat.position.set((Math.random()-0.5)*40,0,(Math.random()-0.5)*40);
+  return goat;
+}
+
+const goats = [];
+for(let i=0;i<6;i++) {
+  const g = makeGoat();
+  scene.add(g);
+  goats.push(g);
+}
+
+// Camera
+camera.position.set(0,12,18);
+camera.lookAt(0,0,0);
+
+// Controls
+const move = {forward:false, back:false, left:false, right:false};
+const speed = 8;
+const clock = new THREE.Clock();
+
+function onKeyDown(e){
+  const code=e.code;
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(code)) e.preventDefault();
+  if(code==='ArrowUp'||code==='KeyW') move.forward=true;
+  if(code==='ArrowDown'||code==='KeyS') move.back=true;
+  if(code==='ArrowLeft'||code==='KeyA') move.left=true;
+  if(code==='ArrowRight'||code==='KeyD') move.right=true;
+  if(code==='KeyR') resetGame();
+}
+function onKeyUp(e){
+  if(code==='ArrowUp'||code==='KeyW') move.forward=false;
+  if(code==='ArrowDown'||code==='KeyS') move.back=false;
+  if(code==='ArrowLeft'||code==='KeyA') move.left=false;
+  if(code==='ArrowRight'||code==='KeyD') move.right=false;
+}
+renderer.domElement.addEventListener('keydown', onKeyDown);
+renderer.domElement.addEventListener('keyup', onKeyUp);
+window.addEventListener('keydown', e => { if(e.code==='KeyR') resetGame(); });
+
+// Game state
+let startTime = performance.now();
+let gameOver = false;
+
+function resetGame(){
+  player.position.set(0,0.6,0);
+  goats.forEach(g => g.position.set((Math.random()-0.5)*40,0,(Math.random()-0.5)*40));
+  startTime = performance.now();
+  gameOver = false;
+  document.getElementById('status').innerText='Survive 20 seconds!';
+}
+resetGame();
+
+// Animate
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+
+  if(!gameOver){
+    let dx=0,dz=0;
+    if(move.forward) dz-=1;
+    if(move.back) dz+=1;
+    if(move.left) dx-=1;
+    if(move.right) dx+=1;
+    if(dx||dz){
+      const len=Math.sqrt(dx*dx+dz*dz);
+      dx/=len; dz/=len;
+      player.position.x+=dx*speed*dt;
+      player.position.z+=dz*speed*dt;
+    }
+
+    const goatSpeed=2.5;
+    goats.forEach(g=>{
+      const vx=player.position.x-g.position.x;
+      const vz=player.position.z-g.position.z;
+      const dist=Math.sqrt(vx*vx+vz*vz);
+      if(dist>0.001){
+        g.position.x+=(vx/dist)*goatSpeed*dt;
+        g.position.z+=(vz/dist)*goatSpeed*dt;
+      }
+      if(dist<1.2){
+        gameOver=true;
+        document.getElementById('status').innerText='You got caught! Press R to restart';
+      }
+    });
+
+    if(performance.now()-startTime>20000){
+      gameOver=true;
+      document.getElementById('status').innerText='You escaped! 🎉 Press R to play again';
+    }
+  }
+
+  // Camera follow
+  const targetPos = new THREE.Vector3(player.position.x, player.position.y+12, player.position.z+18);
+  camera.position.lerp(targetPos,0.1);
+  camera.lookAt(player.position);
+
+  renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Goat Escape Adventure</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #88ccff; }
+    #info { position: absolute; top: 10px; left: 10px; color: white; font-family: Arial, text-shadow: 1px 1px 3px black; }
+    #info .hint { font-size: 13px; opacity: 0.9; }
+  </style>
+</head>
+<body>
+<div id="info">
+  <div id="status">Survive 20 seconds!</div>
+  <div class="hint">Click game area → Arrow keys/WASD to move → R to restart</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script>
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x88ccff);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
+
+// Focus canvas for keyboard
+renderer.domElement.tabIndex = 0;
+renderer.domElement.style.outline = 'none';
+renderer.domElement.addEventListener('click', () => renderer.domElement.focus());
+
+// Resize
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff,0.5));
+const sun = new THREE.DirectionalLight(0xffffff,1);
+sun.position.set(20,30,10);
+sun.castShadow = true;
+scene.add(sun);
+
+// Ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(80,80),
+  new THREE.MeshLambertMaterial({color:0x55aa55})
+);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Player
+const player = new THREE.Mesh(
+  new THREE.SphereGeometry(0.6,16,16),
+  new THREE.MeshPhongMaterial({color:0x00ffe0, shininess:100})
+);
+player.position.y = 0.6;
+player.castShadow = true;
+scene.add(player);
+
+// Low-poly goat generator with leg references for animation
+function makeGoat() {
+  const goat = new THREE.Group();
+  const legs = [];
+
+  const bodyHeight = 0.8 + Math.random()*0.2;
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(1.2, bodyHeight, 2),
+    new THREE.MeshLambertMaterial({color:0xffffff})
+  );
+  body.position.y = bodyHeight/2;
+  body.castShadow = true;
+  goat.add(body);
+
+  const head = new THREE.Mesh(
+    new THREE.BoxGeometry(0.8, 0.8, 0.8),
+    new THREE.MeshLambertMaterial({color:0xffffff})
+  );
+  head.position.set(0, bodyHeight + 0.4, 1.4);
+  head.castShadow = true;
+  goat.add(head);
+
+  // Ears
+  function ear(x) {
+    const e = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1,0.3,0.05),
+      new THREE.MeshLambertMaterial({color:0xffffff})
+    );
+    e.position.set(x, bodyHeight+0.5,1.5);
+    e.castShadow = true;
+    goat.add(e);
+  }
+  ear(-0.25); ear(0.25);
+
+  // Horns
+  function horn(x) {
+    const h = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05,0.05,0.5,6),
+      new THREE.MeshLambertMaterial({color:0xaaaaaa})
+    );
+    h.position.set(x, bodyHeight+1.1, 1.6);
+    h.rotation.x = Math.PI/2;
+    h.castShadow = true;
+    goat.add(h);
+  }
+  horn(-0.2); horn(0.2);
+
+  // Legs
+  function leg(x,z) {
+    const l = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, bodyHeight, 0.2),
+      new THREE.MeshLambertMaterial({color:0x884422})
+    );
+    l.position.set(x, bodyHeight/2, z);
+    l.castShadow = true;
+    goat.add(l);
+    legs.push(l);
+  }
+  leg(-0.4,0.8); leg(0.4,0.8); leg(-0.4,-0.8); leg(0.4,-0.8);
+
+  // Eyes
+  function eye(x) {
+    const e = new THREE.Mesh(
+      new THREE.SphereGeometry(0.07,8,8),
+      new THREE.MeshLambertMaterial({color:0x000000})
+    );
+    e.position.set(x, bodyHeight+0.5,1.75);
+    goat.add(e);
+  }
+  eye(-0.2); eye(0.2);
+
+  // Random start position
+  goat.position.set((Math.random()-0.5)*40,0,(Math.random()-0.5)*40);
+
+  return {group: goat, legs: legs};
+}
+
+const goats = [];
+for(let i=0;i<6;i++) {
+  goats.push(makeGoat());
+  scene.add(goats[i].group);
+}
+
+// Camera
+camera.position.set(0,12,18);
+camera.lookAt(0,0,0);
+
+// Controls
+const move = {forward:false, back:false, left:false, right:false};
+const speed = 8;
+const clock = new THREE.Clock();
+
+function onKeyDown(e){
+  const code=e.code;
+  if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(code)) e.preventDefault();
+  if(code==='ArrowUp'||code==='KeyW') move.forward=true;
+  if(code==='ArrowDown'||code==='KeyS') move.back=true;
+  if(code==='ArrowLeft'||code==='KeyA') move.left=true;
+  if(code==='ArrowRight'||code==='KeyD') move.right=true;
+  if(code==='KeyR') resetGame();
+}
+function onKeyUp(e){
+  const code=e.code;
+  if(code==='ArrowUp'||code==='KeyW') move.forward=false;
+  if(code==='ArrowDown'||code==='KeyS') move.back=false;
+  if(code==='ArrowLeft'||code==='KeyA') move.left=false;
+  if(code==='ArrowRight'||code==='KeyD') move.right=false;
+}
+renderer.domElement.addEventListener('keydown', onKeyDown);
+renderer.domElement.addEventListener('keyup', onKeyUp);
+window.addEventListener('keydown', e => { if(e.code==='KeyR') resetGame(); });
+
+// Game state
+let startTime = performance.now();
+let gameOver = false;
+
+// Animate
+function resetGame(){
+  player.position.set(0,0.6,0);
+  goats.forEach(g => g.group.position.set((Math.random()-0.5)*40,0,(Math.random()-0.5)*40));
+  startTime = performance.now();
+  gameOver = false;
+  document.getElementById('status').innerText='Survive 20 seconds!';
+}
+resetGame();
+
+// Animation loop
+let legPhase = 0;
+function animate(){
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+
+  // Leg animation phase
+  legPhase += dt*10; // speed of leg swing
+
+  // Player movement
+  let dx=0,dz=0;
+  if(move.forward) dz-=1;
+  if(move.back) dz+=1;
+  if(move.left) dx-=1;
+  if(move.right) dx+=1;
+  if(dx||dz){
+    const len=Math.sqrt(dx*dx+dz*dz);
+    dx/=len; dz/=len;
+    player.position.x+=dx*speed*dt;
+    player.position.z+=dz*speed*dt;
+  }
+
+  // Animate player (small bounce)
+  if(dx||dz){
+    player.position.y = 0.6 + Math.sin(legPhase*2)*0.05;
+  } else {
+    player.position.y = 0.6;
+  }
+
+  // Goats chase player
+  const goatSpeed = 2.5;
+  goats.forEach(g=>{
+    const vx = player.position.x - g.group.position.x;
+    const vz = player.position.z - g.group.position.z;
+    const dist = Math.sqrt(vx*vx + vz*vz);
+    if(dist>0.001){
+      g.group.position.x += (vx/dist)*goatSpeed*dt;
+      g.group.position.z += (vz/dist)*goatSpeed*dt;
+    }
+
+    // Animate legs (swing)
+    g.legs.forEach((leg, i) => {
+      const dir = (i%2===0 ? 1 : -1); // opposite legs move opposite
+      leg.rotation.x = Math.sin(legPhase*dir)*0.5;
+    });
+
+    if(dist<1.2){
+      gameOver=true;
+      document.getElementById('status').innerText='You got caught! Press R to restart';
+    }
+  });
+
+  if(!gameOver && performance.now()-startTime>20000){
+    gameOver=true;
+    document.getElementById('status').innerText='You escaped! 🎉 Press R to play again';
+  }
+
+  // Camera follow
+  const targetPos = new THREE.Vector3(player.position.x, player.position.y+12, player.position.z+18);
+  camera.position.lerp(targetPos,0.1);
+  camera.lookAt(player.position);
+
+  renderer.render(scene,camera);
+}
+animate();
+</script>
+</body>
+</html>
